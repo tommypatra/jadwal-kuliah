@@ -13,43 +13,16 @@ return new class extends Migration
     {
         Schema::create('dosens', function (Blueprint $table) {
             $table->id();
-
             $table->foreignId('user_id')
-                ->nullable()
                 ->constrained()
-                ->nullOnDelete();
+                ->restrictOnDelete();
 
-            $table->unsignedBigInteger('dosen_siakad_id')->unique();
-
-            $table->unsignedBigInteger('program_studi_siakad_id')
-                ->nullable();
-
-            $table->string('nama', 180);
-            $table->string('gelar_depan', 30)
-                ->nullable();
-            $table->string('gelar_belakang', 50)
-                ->nullable();
             $table->string('nip', 50)
                 ->nullable();
-            $table->string('nidn', 50)
-                ->nullable();
-            $table->enum('jenis_kelamin', ['L', 'P'])
-                ->nullable();
 
-            $table->string('email', 180)
-                ->nullable();
+            $table->tinyInteger('status_aktif')->default(1);
 
-            $table->string('email_kampus', 180)
-                ->nullable();
-
-            $table->string('nomor_hp', 180)
-                ->nullable();
-
-            $table->string('status_aktif', 50)
-                ->nullable();
-
-            $table->timestamp('updated_at_siakad')
-                ->nullable();
+            $table->timestamp('updated_at_siakad')->nullable();
 
             $table->timestamps();
         });

@@ -13,12 +13,8 @@ class Dosen extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function programStudi()
+    public function distribusiMengajar()
     {
-        return $this->belongsTo(
-            ProgramStudi::class,
-            'program_studi_siakad_id',
-            'program_studi_siakad_id'
-        );
+        return $this->belongsTo(DistribusiMengajar::class);
     }
 }

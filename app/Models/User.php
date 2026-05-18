@@ -22,6 +22,7 @@ class User extends Authenticatable implements JWTSubject
     protected $fillable = [
         'name',
         'email',
+        'user_siakad_id',
         'password',
     ];
 
@@ -61,5 +62,10 @@ class User extends Authenticatable implements JWTSubject
     public function dosen()
     {
         return $this->hasOne(Dosen::class);
+    }
+
+    public function roleUser()
+    {
+        return $this->hasMany(RoleUser::class);
     }
 }

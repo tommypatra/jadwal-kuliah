@@ -2,26 +2,34 @@
 
 namespace App\Libraries;
 
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Http\Client\Response;
 
 class Sevima
 {
     protected string $baseUrl;
+
     protected array $headers;
+
     protected int $timeout;
 
-    /*
-    |--------------------------------------------------------------------------
-    | Retry Delay
-    |--------------------------------------------------------------------------
-    */
-    protected int $retryDelay = 2;
+    protected int $maxRequests = 30;
+
+    protected int $windowSeconds = 60;
+
+    protected string $lockKey = 'sevima-api-lock';
+
+    protected string $counterKey = 'sevima-api-counter';
+
+    protected string $windowKey = 'sevima-api-window-start';
+
+    protected string $cooldownKey = 'sevima-api-cooldown';
+
     public function __construct()
     {
         $config = config('sevima');
-        $this->baseUrl = rtrim($config['base_url'], '/') . '/';
+        $this->baseUrl = rtrim($config['base_url'], '/').'/';
         $this->timeout = $config['timeout'] ?? 30;
         $this->headers = $config['headers'];
     }
@@ -63,85 +71,153 @@ class Sevima
         string $endpoint,
         array $payload = []
     ): array {
-        while (true) {
-            /*
-            |--------------------------------------------------------------------------
-            | GLOBAL LOCK
-            |--------------------------------------------------------------------------
-            |
-            | Semua request menggunakan shared API key
-            | harus antre satu per satu
-            |
-            */
+        return Cache::lock($this->lockKey, 120)
+            ->block(120, function () use ($method, $endpoint, $payload) {
+                /*
+                |--------------------------------------------------------------------------
+                | GLOBAL COOLDOWN
+                |--------------------------------------------------------------------------
+                */
+                $cooldownUntil = Cache::get($this->cooldownKey);
+                if ($cooldownUntil && now()->timestamp < $cooldownUntil) {
+                    $wait = $cooldownUntil - now()->timestamp;
+                    logger()->warning('SEVIMA cooldown active', [
+                        'wait' => $wait,
+                    ]);
+                    sleep($wait);
+                }
 
-            return Cache::lock('sevima-api-lock', 10)
-                ->block(10, function () use (
-                    $method,
-                    $endpoint,
-                    $payload
-                ) {
-                    try {
-                        $url = $this->baseUrl . ltrim($endpoint, '/');
-                        $http = Http::withHeaders($this->headers)
-                            ->timeout($this->timeout);
-                        $response = match ($method) {
-                            'POST' => $http->post($url, $payload),
-                            'PUT' => $http->put($url, $payload),
-                            'DELETE' => $http->delete($url, $payload),
-                            default => $http->get($url, $payload),
-                        };
+                /*
+                |--------------------------------------------------------------------------
+                | WINDOW TRACKING
+                |--------------------------------------------------------------------------
+                */
 
-                        /*
-                        |--------------------------------------------------------------------------
-                        | SUCCESS
-                        |--------------------------------------------------------------------------
-                        */
+                $windowStart = Cache::get($this->windowKey);
+                if (! $windowStart) {
+                    $windowStart = now()->timestamp;
+                    Cache::put(
+                        $this->windowKey,
+                        $windowStart,
+                        $this->windowSeconds
+                    );
+                    Cache::put(
+                        $this->counterKey,
+                        0,
+                        $this->windowSeconds
+                    );
+                }
+                $elapsed = now()->timestamp - $windowStart;
 
-                        if ($response->successful()) {
-                            return $this->formatResponse($response);
-                        }
+                /*
+                |--------------------------------------------------------------------------
+                | RESET WINDOW
+                |--------------------------------------------------------------------------
+                */
+                if ($elapsed >= $this->windowSeconds) {
+                    $windowStart = now()->timestamp;
+                    $elapsed = 0;
+                    Cache::put(
+                        $this->windowKey,
+                        $windowStart,
+                        $this->windowSeconds
+                    );
+                    Cache::put(
+                        $this->counterKey,
+                        0,
+                        $this->windowSeconds
+                    );
+                }
 
-                        /*
-                        |--------------------------------------------------------------------------
-                        | RATE LIMIT
-                        |--------------------------------------------------------------------------
-                        */
+                /*
+                |--------------------------------------------------------------------------
+                | LOCAL RATE LIMIT PREVENTION
+                |--------------------------------------------------------------------------
+                */
+                $count = Cache::increment($this->counterKey);
+                if ($count > $this->maxRequests) {
+                    $wait = max(1, $this->windowSeconds - $elapsed);
+                    logger()->warning('SEVIMA local rate limit wait', [
+                        'count' => $count,
+                        'wait' => $wait,
+                    ]);
+                    Cache::put(
+                        $this->cooldownKey,
+                        now()->timestamp + $wait,
+                        $wait
+                    );
+                    sleep($wait);
 
-                        if ($response->status() == 429) {
-                            logger()->warning('SEVIMA rate limit hit', [
-                                'endpoint' => $endpoint,
-                                'wait' => $this->retryDelay,
-                            ]);
+                    return $this->request(
+                        $method,
+                        $endpoint,
+                        $payload
+                    );
+                }
 
-                            /*
-                            |--------------------------------------------------------------------------
-                            | Tunggu lalu coba lagi
-                            |--------------------------------------------------------------------------
-                            */
-                            sleep($this->retryDelay);
-                            return $this->request(
-                                $method,
-                                $endpoint,
-                                $payload
-                            );
-                        }
-                        /*
-                        |--------------------------------------------------------------------------
-                        | OTHER ERROR
-                        |--------------------------------------------------------------------------
-                        */
+                try {
+                    $url = $this->baseUrl.ltrim($endpoint, '/');
+                    $http = Http::withHeaders($this->headers)
+                        ->timeout($this->timeout);
+                    $response = match ($method) {
+                        'POST' => $http->post($url, $payload),
+                        'PUT' => $http->put($url, $payload),
+                        'DELETE' => $http->delete($url, $payload),
+                        default => $http->get($url, $payload),
+                    };
+                    /*
+                    |--------------------------------------------------------------------------
+                    | SUCCESS
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($response->successful()) {
                         return $this->formatResponse($response);
-                    } catch (\Throwable $e) {
-                        report($e);
-                        return [
-                            'success' => false,
-                            'status' => 500,
-                            'message' => $e->getMessage(),
-                            'data' => null,
-                        ];
                     }
-                });
-        }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | REMOTE RATE LIMIT
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($response->status() === 429) {
+                        $wait = max(1, $this->windowSeconds - $elapsed);
+                        logger()->warning('SEVIMA remote rate limit hit', [
+                            'endpoint' => $endpoint,
+                            'wait' => $wait,
+                        ]);
+
+                        Cache::put(
+                            $this->cooldownKey,
+                            now()->timestamp + $wait,
+                            $wait
+                        );
+                        sleep($wait);
+
+                        return $this->request(
+                            $method,
+                            $endpoint,
+                            $payload
+                        );
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | OTHER ERROR
+                    |--------------------------------------------------------------------------
+                    */
+                    return $this->formatResponse($response);
+
+                } catch (\Throwable $e) {
+                    report($e);
+
+                    return [
+                        'success' => false,
+                        'status' => 500,
+                        'message' => $e->getMessage(),
+                        'data' => null,
+                    ];
+                }
+            });
     }
 
     /*
@@ -149,7 +225,6 @@ class Sevima
     | FORMAT RESPONSE
     |--------------------------------------------------------------------------
     */
-
     protected function formatResponse(Response $response): array
     {
         return [
@@ -158,7 +233,6 @@ class Sevima
             'message' => $response->successful()
                 ? 'Success'
                 : $response->body(),
-
             'data' => $response->json(),
         ];
     }

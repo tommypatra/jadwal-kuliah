@@ -8,12 +8,18 @@ class ProgramStudi extends Model
 {
     protected $guarded = ['id'];
 
-    public function dosen()
+    public function fakultas()
     {
-        return $this->hasMany(
-            Dosen::class,
-            'program_studi_siakad_id',
-            'program_studi_siakad_id'
-        );
+        return $this->belongsTo(Fakultas::class);
+    }
+
+    public function matakuliah()
+    {
+        return $this->hasMany(MataKuliah::class);
+    }
+
+    public function distribusiMengajar()
+    {
+        return $this->hasMany(DistribusiMengajar::class);
     }
 }
