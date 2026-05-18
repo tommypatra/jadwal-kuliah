@@ -50,11 +50,9 @@ class FakultasService
             fn ($q) => $q->where('fakultas_siakad_id', $filters['fakultas_siakad_id'])
         );
 
-        $query->orderBy('nama_fakultas');
-
-        return $query->paginate(
-            $filters['per_page'] ?? 10
-        );
+        return $query
+            ->orderBy('nama_fakultas')
+            ->paginate($filters['per_page'] ?? 10);
     }
 
     /*
@@ -63,9 +61,9 @@ class FakultasService
     |--------------------------------------------------------------------------
     */
 
-    public function show(Fakultas $fakultas): Fakultas
+    public function show(int $id): Fakultas
     {
-        return $fakultas;
+        return Fakultas::findOrFail($id);
     }
 
     public function store(array $data): Fakultas
@@ -76,13 +74,16 @@ class FakultasService
     public function update(int $id, array $data): Fakultas
     {
         $fakultas = Fakultas::findOrFail($id);
+
         $fakultas->update($data);
 
         return $fakultas->refresh();
     }
 
-    public function destroy(Fakultas $fakultas): bool
+    public function destroy(int $id): bool
     {
+        $fakultas = Fakultas::findOrFail($id);
+
         return $fakultas->delete();
     }
 

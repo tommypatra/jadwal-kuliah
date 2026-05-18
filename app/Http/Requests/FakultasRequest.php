@@ -4,7 +4,6 @@ namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class FakultasRequest extends FormRequest
 {
@@ -23,13 +22,12 @@ class FakultasRequest extends FormRequest
      */
     public function rules(): array
     {
-        $id = $this->route('fakultas')?->id;
+        // $id = $this->route('id');
 
         return [
             'fakultas_siakad_id' => [
                 'nullable',
                 'integer',
-                Rule::unique('fakultas', 'fakultas_siakad_id')->ignore($id),
             ],
             'nama_fakultas' => [
                 'required',
