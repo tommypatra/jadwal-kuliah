@@ -7,7 +7,7 @@ async function checkToken() {
         return;
     }
     try {
-        const res = await axios.get(`${API_URL}/check-token`, {
+        const res = await axios.get(`${API_URL}/auth/validate`, {
             headers: {
                 Authorization: `Bearer ${token}`,
                 Accept: 'application/json'
@@ -23,7 +23,7 @@ async function checkToken() {
 async function logout() {
     const token = localStorage.getItem('token');
     try {
-        await axios.post(`${window.APP.API_URL}/logout`, {}, {
+        await axios.post(`${window.APP.API_URL}/auth/logout`, {}, {
             headers: {
                 Authorization: `Bearer ${token}`
             }

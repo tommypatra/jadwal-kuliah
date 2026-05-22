@@ -10,15 +10,15 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::post('auth-check', [AuthController::class, 'authCheck']);
+Route::post('auth/login-siakad', [AuthController::class, 'authCheck']);
 
 Route::post(
-    'auth-web',
+    'auth/login-web',
     [AuthController::class, 'authWeb']
 )->middleware('throttle:auth-web');
 
-Route::get('auth/google', [AuthController::class, 'redirectGoogle']);
-Route::get('auth/callback', [AuthController::class, 'callbackGoogle']);
+Route::get('auth/login-google', [AuthController::class, 'redirectGoogle']);
+Route::get('auth/login-google/callback', [AuthController::class, 'callbackGoogle']);
 
 /*
 |--------------------------------------------------------------------------
@@ -31,8 +31,8 @@ Route::middleware([
     'throttle:jwt-api',
 ])->group(function () {
 
-    Route::get('check-token', [AuthController::class, 'checkToken']);
-    Route::post('logout', [AuthController::class, 'logout']);
+    Route::get('auth/validate', [AuthController::class, 'validate']);
+    Route::post('auth/logout', [AuthController::class, 'logout']);
 
     /*
     |--------------------------------------------------------------------------
