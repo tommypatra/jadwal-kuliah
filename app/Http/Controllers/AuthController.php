@@ -79,7 +79,7 @@ class AuthController extends Controller
         }
     }
 
-    public function checkToken()
+    public function validate()
     {
         $user = auth()->guard('api')->user();
 

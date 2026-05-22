@@ -41,7 +41,7 @@ Route::middleware([
     */
 
     Route::middleware([
-        'role:1,3',
+        'role:Admin,Pengelola',
         'throttle:sync-api',
     ])->prefix('fakultas')->group(function () {
         Route::get('preview-sync', [FakultasController::class, 'previewSync']);
@@ -54,7 +54,7 @@ Route::middleware([
     |--------------------------------------------------------------------------
     */
 
-    Route::middleware('role:1')->group(function () {
+    Route::middleware('role:Admin')->group(function () {
         Route::apiResource('fakultas', FakultasController::class);
     });
 
